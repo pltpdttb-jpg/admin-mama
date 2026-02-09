@@ -45,7 +45,7 @@
                         <canvas id="regionChart"></canvas>
                     </div>
                     <div class="bg-white p-4 rounded shadow">
-                        <h3 class="font-bold mb-4">Scenario Performance</h3>
+                        <h3 class="font-bold mb-4">Scenario Distribution</h3>
                         <canvas id="scenarioChart"></canvas>
                     </div>
                 </div>
@@ -87,7 +87,7 @@
                     <div class="grid grid-cols-2 gap-4 text-sm">
                         <div><b>Name:</b> {{ selectedSession.full_name }}</div>
                         <div><b>Region:</b> {{ selectedSession.region }} / {{ selectedSession.zone }}</div>
-                        <div><b>Scenario:</b> ID {{ selectedSession.scenario_id }}</div>
+                        <div><b>Scenario ID:</b> {{ selectedSession.scenario_id }}</div>
                         <div><b>Pyramid Choice:</b> {{ selectedSession.user_pyramid_choice }}</div>
                     </div>
                     <div class="p-4 bg-slate-50 rounded border">
@@ -115,9 +115,11 @@
         const { createApp, ref, computed, onMounted, watch } = Vue
         const { createClient } = supabase
 
-        // ⚠️ ใส่ KEY เดียวกันกับ User App
-        const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co'; 
-        const SUPABASE_KEY = 'YOUR_ANON_KEY';
+        // ==========================================
+        // ✅ KEY เดียวกัน
+        // ==========================================
+        const SUPABASE_URL = 'https://tjyiyzkfhspsetjzrpza.supabase.co'; 
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRqeWl5emtmaHNwc2V0anpycHphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2NTA1MDksImV4cCI6MjA4NjIyNjUwOX0.gURwQD6FIg2huu6HWQxO4I2QQwkh-DrjYu2fuMIEigw';
         
         const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -162,7 +164,8 @@
                         });
                         regionChart = new Chart(ctx, {
                             type: 'bar',
-                            data: { labels: regions, datasets: [{ label: 'Avg Score', data: scores, backgroundColor: '#4f46e5' }] }
+                            data: { labels: regions, datasets: [{ label: 'Avg Score', data: scores, backgroundColor: '#4f46e5' }] },
+                            options: { scales: { y: { beginAtZero: true, max: 100 } } }
                         });
                     }
                 };
