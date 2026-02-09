@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAMA Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body { font-family: 'Sarabun', sans-serif; background-color: #f1f5f9; }</style>
+</head>
+<body id="admin">
+    <div class="flex h-screen overflow-hidden">
+        
+        <aside class="w-64 bg-slate-800 text-white flex flex-col">
+            <div class="p-6 text-xl font-bold border-b border-slate-700">MAMA Admin</div>
+            <nav class="flex-1 p-4 space-y-2">
+                <a href="#" @click="view='dashboard'" :class="view=='dashboard'?'bg-slate-700':''" class="block p-3 rounded hover:bg-slate-700">Dashboard</a>
+                <a href="#" @click="view='sessions'" :class="view=='sessions'?'bg-slate-700':''" class="block p-3 rounded hover:bg-slate-700">Session Logs</a>
+            </nav>
+        </aside>
+
+        <main class="flex-1 overflow-y-auto p-8">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-2xl font-bold text-slate-800">{{ view === 'dashboard' ? 'Performance Overview' : 'Session Logs' }}</h2>
+                <div class="flex gap-2">
+                    <select v-model="filterRegion" class="p-2 border rounded"><option value="">All Regions</option><option v-for="i in 5" :value="'RH'+i">RH{{i}}</option></select>
+                    <button @click="fetchData" class="bg-blue-600 text-white px-4 py-2 rounded">Refresh</button>
+                </div>
+            </div>
+
+            <div v-if="view === 'dashboard'" class="space-y-6">
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="bg-white p-4 rounded shadow"><div class="text-gray-500 text-sm">Total Sessions</div><div class="text-2xl font-bold">{{ stats.total }}</div></div>
+                    <div class="bg-white p-4 rounded shadow"><div class="text-gray-500 text-sm">Avg Score</div><div class="text-2xl font-bold text-blue-600">{{ stats.avgScore }}</div></div>
+                    <div class="bg-white p-4 rounded shadow"><div class="text-gray-500 text-sm">Pass Rate (>70%)</div><div class="text-2xl font-bold text-green-600">{{ stats.passRate }}%</div></div>
+                    <div class="bg-white p-4 rounded shadow"><div class="text-gray-500 text-sm">Participants</div><div class="text-2xl font-bold">{{ stats.users }}</div></div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-6">
+                    <div class="bg-white p-4 rounded shadow">
+                        <h3 class="font-bold mb-4">Avg Score by Region</h3>
+                        <canvas id="regionChart"></canvas>
+                    </div>
+                    <div class="bg-white p-4 rounded shadow">
+                        <h3 class="font-bold mb-4">Scenario Performance</h3>
+                        <canvas id="scenarioChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="view === 'sessions'" class="bg-white rounded shadow overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-100 text-slate-600 uppercase text-sm">
+                        <tr>
+                            <th class="p-4 border-b">Date</th>
+                            <th class="p-4 border-b">Name</th>
+                            <th class="p-4 border-b">Region</th>
+                            <th class="p-4 border-b">Score</th>
+                            <th class="p-4 border-b">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="s in filteredSessions" :key="s.id" class="hover:bg-slate-50">
+                            <td class="p-4 border-b">{{ new Date(s.created_at).toLocaleDateString() }}</td>
+                            <td class="p-4 border-b">{{ s.full_name }}<br><span class="text-xs text-gray-500">{{ s.employee_id }}</span></td>
+                            <td class="p-4 border-b"><span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">{{ s.region }}</span></td>
+                            <td class="p-4 border-b font-bold" :class="s.ai_total_score >= 70 ? 'text-green-600' : 'text-red-600'">{{ s.ai_total_score }}</td>
+                            <td class="p-4 border-b">
+                                <button @click="openModal(s)" class="text-blue-600 hover:underline">View</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+        <div v-if="selectedSession" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
+                <div class="flex justify-between items-start mb-4">
+                    <h3 class="text-xl font-bold">Session Details</h3>
+                    <button @click="selectedSession = null" class="text-gray-500 text-xl">&times;</button>
+                </div>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div><b>Name:</b> {{ selectedSession.full_name }}</div>
+                        <div><b>Region:</b> {{ selectedSession.region }} / {{ selectedSession.zone }}</div>
+                        <div><b>Scenario:</b> ID {{ selectedSession.scenario_id }}</div>
+                        <div><b>Pyramid Choice:</b> {{ selectedSession.user_pyramid_choice }}</div>
+                    </div>
+                    <div class="p-4 bg-slate-50 rounded border">
+                        <h4 class="font-bold mb-2">Audio Playback</h4>
+                        <div class="mb-3">
+                            <p class="text-xs text-gray-500">Turn 1: Proposal</p>
+                            <audio :src="selectedSession.audio_url_turn1" controls class="w-full h-8"></audio>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500">Turn 2: Objection</p>
+                            <audio :src="selectedSession.audio_url_turn2" controls class="w-full h-8"></audio>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="font-bold mb-2">AI Feedback (Score: {{ selectedSession.ai_total_score }})</h4>
+                        <p class="text-sm text-green-700 mb-1"><b>Strength:</b> {{ selectedSession.ai_feedback.strength }}</p>
+                        <p class="text-sm text-amber-700"><b>Weakness:</b> {{ selectedSession.ai_feedback.weakness }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, watch } = Vue
+        const { createClient } = supabase
+
+        // ⚠️ ใส่ KEY เดียวกันกับ User App
+        const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co'; 
+        const SUPABASE_KEY = 'YOUR_ANON_KEY';
+        
+        const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        createApp({
+            setup() {
+                const view = ref('dashboard');
+                const sessions = ref([]);
+                const filterRegion = ref('');
+                const selectedSession = ref(null);
+                let regionChart = null;
+
+                const fetchData = async () => {
+                    const { data } = await _supabase.from('mama_sessions').select('*').order('created_at', { ascending: false });
+                    if(data) sessions.value = data;
+                    updateCharts();
+                };
+
+                const filteredSessions = computed(() => {
+                    return filterRegion.value ? sessions.value.filter(s => s.region === filterRegion.value) : sessions.value;
+                });
+
+                const stats = computed(() => {
+                    const data = filteredSessions.value;
+                    const total = data.length;
+                    const avgScore = total ? Math.round(data.reduce((a,b)=>a+b.ai_total_score,0)/total) : 0;
+                    const passRate = total ? Math.round((data.filter(s=>s.ai_total_score>=70).length/total)*100) : 0;
+                    const users = new Set(data.map(s=>s.employee_id)).size;
+                    return { total, avgScore, passRate, users };
+                });
+
+                const updateCharts = () => {
+                    if(view.value !== 'dashboard') return;
+                    
+                    // Region Chart
+                    const ctx = document.getElementById('regionChart');
+                    if(ctx) {
+                        if(regionChart) regionChart.destroy();
+                        const regions = ['RH1','RH2','RH3','RH4','RH5'];
+                        const scores = regions.map(r => {
+                            const rs = sessions.value.filter(s => s.region === r);
+                            return rs.length ? rs.reduce((a,b)=>a+b.ai_total_score,0)/rs.length : 0;
+                        });
+                        regionChart = new Chart(ctx, {
+                            type: 'bar',
+                            data: { labels: regions, datasets: [{ label: 'Avg Score', data: scores, backgroundColor: '#4f46e5' }] }
+                        });
+                    }
+                };
+
+                onMounted(fetchData);
+                watch(view, () => setTimeout(updateCharts, 100));
+
+                const openModal = (s) => selectedSession.value = s;
+
+                return { view, sessions, filteredSessions, filterRegion, stats, fetchData, selectedSession, openModal };
+            }
+        }).mount('#admin');
+    </script>
+</body>
+</html>
