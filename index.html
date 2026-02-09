@@ -3,179 +3,254 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAMA Admin Dashboard</title>
+    <title>MAMA Admin & Report Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script> <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>body { font-family: 'Sarabun', sans-serif; background-color: #f1f5f9; }</style>
+    <style>body { font-family: 'Sarabun', sans-serif; background-color: #f8fafc; }</style>
 </head>
 <body id="admin">
+
     <div class="flex h-screen overflow-hidden">
         
-        <aside class="w-64 bg-slate-800 text-white flex flex-col">
-            <div class="p-6 text-xl font-bold border-b border-slate-700">MAMA Admin</div>
+        <aside class="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-10">
+            <div class="p-6 text-xl font-bold border-b border-slate-700 flex items-center gap-2">
+                <i class="fa-solid fa-user-tie"></i> MAMA Admin
+            </div>
             <nav class="flex-1 p-4 space-y-2">
-                <a href="#" @click="view='dashboard'" :class="view=='dashboard'?'bg-slate-700':''" class="block p-3 rounded hover:bg-slate-700">Dashboard</a>
-                <a href="#" @click="view='sessions'" :class="view=='sessions'?'bg-slate-700':''" class="block p-3 rounded hover:bg-slate-700">Session Logs</a>
+                <a href="#" class="block p-3 rounded bg-indigo-600 text-white font-bold shadow"><i class="fa-solid fa-table-list mr-2"></i> Daily Report</a>
             </nav>
+            <div class="p-4 text-xs text-slate-500 text-center">v2.0 System Override</div>
         </aside>
 
-        <main class="flex-1 overflow-y-auto p-8">
-            <div class="flex justify-between items-center mb-8">
-                <h2 class="text-2xl font-bold text-slate-800">{{ view === 'dashboard' ? 'Performance Overview' : 'Session Logs' }}</h2>
-                <div class="flex gap-2">
-                    <select v-model="filterRegion" class="p-2 border rounded"><option value="">All Regions</option><option v-for="i in 5" :value="'RH'+i">RH{{i}}</option></select>
-                    <button @click="fetchData" class="bg-blue-600 text-white px-4 py-2 rounded">Refresh</button>
-                </div>
-            </div>
-
-            <div v-if="view === 'dashboard'" class="space-y-6">
-                <div class="grid grid-cols-4 gap-4">
-                    <div class="bg-white p-4 rounded shadow"><div class="text-gray-500 text-sm">Total Sessions</div><div class="text-2xl font-bold">{{ stats.total }}</div></div>
-                    <div class="bg-white p-4 rounded shadow"><div class="text-gray-500 text-sm">Avg Score</div><div class="text-2xl font-bold text-blue-600">{{ stats.avgScore }}</div></div>
-                    <div class="bg-white p-4 rounded shadow"><div class="text-gray-500 text-sm">Pass Rate (>70%)</div><div class="text-2xl font-bold text-green-600">{{ stats.passRate }}%</div></div>
-                    <div class="bg-white p-4 rounded shadow"><div class="text-gray-500 text-sm">Participants</div><div class="text-2xl font-bold">{{ stats.users }}</div></div>
+        <main class="flex-1 overflow-y-auto p-8 relative">
+            
+            <div class="flex flex-col md:flex-row justify-between items-end md:items-center mb-8 gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">จัดการข้อมูลรายวัน</h2>
+                    <p class="text-slate-500 text-sm">ดึงรายงานและสั่ง AI ตรวจสอบย้อนหลัง</p>
                 </div>
                 
-                <div class="grid grid-cols-2 gap-6">
-                    <div class="bg-white p-4 rounded shadow">
-                        <h3 class="font-bold mb-4">Avg Score by Region</h3>
-                        <canvas id="regionChart"></canvas>
+                <div class="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">เลือกวันที่</label>
+                        <input type="date" v-model="filterDate" class="border p-2 rounded-lg text-sm bg-slate-50">
                     </div>
-                    <div class="bg-white p-4 rounded shadow">
-                        <h3 class="font-bold mb-4">Scenario Distribution</h3>
-                        <canvas id="scenarioChart"></canvas>
-                    </div>
+                    <button @click="fetchData" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow transition-all">
+                        <i class="fa-solid fa-magnifying-glass mr-1"></i> ค้นหา
+                    </button>
+                    <button @click="exportCSV" :disabled="sessions.length===0" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow transition-all disabled:opacity-50">
+                        <i class="fa-solid fa-file-excel mr-1"></i> Export CSV
+                    </button>
                 </div>
             </div>
 
-            <div v-if="view === 'sessions'" class="bg-white rounded shadow overflow-hidden">
-                <table class="w-full text-left border-collapse">
-                    <thead class="bg-slate-100 text-slate-600 uppercase text-sm">
-                        <tr>
-                            <th class="p-4 border-b">Date</th>
-                            <th class="p-4 border-b">Name</th>
-                            <th class="p-4 border-b">Region</th>
-                            <th class="p-4 border-b">Score</th>
-                            <th class="p-4 border-b">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="s in filteredSessions" :key="s.id" class="hover:bg-slate-50">
-                            <td class="p-4 border-b">{{ new Date(s.created_at).toLocaleDateString() }}</td>
-                            <td class="p-4 border-b">{{ s.full_name }}<br><span class="text-xs text-gray-500">{{ s.employee_id }}</span></td>
-                            <td class="p-4 border-b"><span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">{{ s.region }}</span></td>
-                            <td class="p-4 border-b font-bold" :class="s.ai_total_score >= 70 ? 'text-green-600' : 'text-red-600'">{{ s.ai_total_score }}</td>
-                            <td class="p-4 border-b">
-                                <button @click="openModal(s)" class="text-blue-600 hover:underline">View</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-l-4 border-l-blue-500">
+                    <div class="text-xs text-slate-500 uppercase font-bold">Total Sessions</div>
+                    <div class="text-2xl font-bold text-slate-800">{{ stats.total }}</div>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-l-4 border-l-green-500">
+                    <div class="text-xs text-slate-500 uppercase font-bold">Avg Score</div>
+                    <div class="text-2xl font-bold text-green-600">{{ stats.avgScore }}</div>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-l-4 border-l-red-500">
+                    <div class="text-xs text-slate-500 uppercase font-bold">Need Review (Score 0)</div>
+                    <div class="text-2xl font-bold text-red-600">{{ stats.failed }}</div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-slate-100 text-slate-600 uppercase text-xs font-bold tracking-wider">
+                            <tr>
+                                <th class="p-4 border-b">Time</th>
+                                <th class="p-4 border-b">Employee</th>
+                                <th class="p-4 border-b">Scenario</th>
+                                <th class="p-4 border-b">Input</th>
+                                <th class="p-4 border-b">Score</th>
+                                <th class="p-4 border-b text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-sm">
+                            <tr v-for="s in sessions" :key="s.id" class="hover:bg-slate-50 transition-colors border-b last:border-0">
+                                <td class="p-4 text-slate-500">{{ new Date(s.created_at).toLocaleTimeString('th-TH') }}</td>
+                                <td class="p-4">
+                                    <div class="font-bold text-slate-800">{{ s.full_name }}</div>
+                                    <div class="text-xs text-slate-500">{{ s.employee_id }} | {{ s.region }}</div>
+                                </td>
+                                <td class="p-4">
+                                    <span class="bg-gray-100 px-2 py-1 rounded text-xs">Case {{ s.scenario_id }}</span>
+                                    <div class="text-xs mt-1 text-slate-500">Choice: {{ s.user_pyramid_choice }}</div>
+                                </td>
+                                <td class="p-4">
+                                    <span v-if="s.input_type=='text'" class="text-indigo-600"><i class="fa-solid fa-keyboard"></i> Text</span>
+                                    <span v-else class="text-pink-600"><i class="fa-solid fa-microphone"></i> Audio</span>
+                                </td>
+                                <td class="p-4">
+                                    <span v-if="s.ai_total_score > 0" :class="s.ai_total_score >= 70 ? 'text-green-600 bg-green-50 px-2 py-1 rounded font-bold' : 'text-orange-600 bg-orange-50 px-2 py-1 rounded font-bold'">
+                                        {{ s.ai_total_score }}
+                                    </span>
+                                    <span v-else class="text-red-500 bg-red-50 px-2 py-1 rounded font-bold text-xs">ERROR / WAIT</span>
+                                </td>
+                                <td class="p-4 text-center">
+                                    <button @click="reAnalyze(s)" :disabled="isProcessing[s.id]" class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full hover:bg-indigo-100 border border-indigo-200 transition-all">
+                                        <span v-if="isProcessing[s.id]"><i class="fa-solid fa-circle-notch fa-spin"></i> Analyzing...</span>
+                                        <span v-else><i class="fa-solid fa-robot"></i> AI Re-Check</span>
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr v-if="sessions.length === 0">
+                                <td colspan="6" class="p-8 text-center text-slate-400">ไม่พบข้อมูลในวันที่เลือก</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </main>
-
-        <div v-if="selectedSession" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <div class="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-                <div class="flex justify-between items-start mb-4">
-                    <h3 class="text-xl font-bold">Session Details</h3>
-                    <button @click="selectedSession = null" class="text-gray-500 text-xl">&times;</button>
-                </div>
-                <div class="space-y-4">
-                    <div class="grid grid-cols-2 gap-4 text-sm">
-                        <div><b>Name:</b> {{ selectedSession.full_name }}</div>
-                        <div><b>Region:</b> {{ selectedSession.region }} / {{ selectedSession.zone }}</div>
-                        <div><b>Scenario ID:</b> {{ selectedSession.scenario_id }}</div>
-                        <div><b>Pyramid Choice:</b> {{ selectedSession.user_pyramid_choice }}</div>
-                    </div>
-                    <div class="p-4 bg-slate-50 rounded border">
-                        <h4 class="font-bold mb-2">Audio Playback</h4>
-                        <div class="mb-3">
-                            <p class="text-xs text-gray-500">Turn 1: Proposal</p>
-                            <audio :src="selectedSession.audio_url_turn1" controls class="w-full h-8"></audio>
-                        </div>
-                        <div>
-                            <p class="text-xs text-gray-500">Turn 2: Objection</p>
-                            <audio :src="selectedSession.audio_url_turn2" controls class="w-full h-8"></audio>
-                        </div>
-                    </div>
-                    <div>
-                        <h4 class="font-bold mb-2">AI Feedback (Score: {{ selectedSession.ai_total_score }})</h4>
-                        <p class="text-sm text-green-700 mb-1"><b>Strength:</b> {{ selectedSession.ai_feedback.strength }}</p>
-                        <p class="text-sm text-amber-700"><b>Weakness:</b> {{ selectedSession.ai_feedback.weakness }}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 
     <script>
-        const { createApp, ref, computed, onMounted, watch } = Vue
+        const { createApp, ref, computed, onMounted } = Vue
         const { createClient } = supabase
 
-        // ==========================================
-        // ✅ KEY เดียวกัน
-        // ==========================================
+        // CONFIG (ชุดเดิม)
         const SUPABASE_URL = 'https://tjyiyzkfhspsetjzrpza.supabase.co'; 
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRqeWl5emtmaHNwc2V0anpycHphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2NTA1MDksImV4cCI6MjA4NjIyNjUwOX0.gURwQD6FIg2huu6HWQxO4I2QQwkh-DrjYu2fuMIEigw';
-        
+        const GEMINI_API_KEYS = ['AIzaSyDOPcBrKvf9diJhdJGPrbTW8rqwcVaQNZs']; // ใส่ Key ให้ครบได้
+
         const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
         createApp({
             setup() {
-                const view = ref('dashboard');
                 const sessions = ref([]);
-                const filterRegion = ref('');
-                const selectedSession = ref(null);
-                let regionChart = null;
+                const filterDate = ref(new Date().toISOString().split('T')[0]); // Default Today
+                const isProcessing = ref({}); // Track re-analysis status per row
 
+                // Stats
+                const stats = computed(() => {
+                    const total = sessions.value.length;
+                    const valid = sessions.value.filter(s => s.ai_total_score > 0);
+                    const avgScore = valid.length ? Math.round(valid.reduce((a,b)=>a+b.ai_total_score,0)/valid.length) : 0;
+                    const failed = sessions.value.filter(s => s.ai_total_score === 0).length;
+                    return { total, avgScore, failed };
+                });
+
+                // 1. Fetch Data By Date
                 const fetchData = async () => {
-                    const { data } = await _supabase.from('mama_sessions').select('*').order('created_at', { ascending: false });
-                    if(data) sessions.value = data;
-                    updateCharts();
+                    // Start of day to End of day query
+                    const start = new Date(filterDate.value);
+                    start.setHours(0,0,0,0);
+                    const end = new Date(filterDate.value);
+                    end.setHours(23,59,59,999);
+
+                    const { data, error } = await _supabase
+                        .from('mama_sessions')
+                        .select('*')
+                        .gte('created_at', start.toISOString())
+                        .lte('created_at', end.toISOString())
+                        .order('created_at', { ascending: false });
+
+                    if (error) alert('Error loading data');
+                    else sessions.value = data;
                 };
 
-                const filteredSessions = computed(() => {
-                    return filterRegion.value ? sessions.value.filter(s => s.region === filterRegion.value) : sessions.value;
-                });
-
-                const stats = computed(() => {
-                    const data = filteredSessions.value;
-                    const total = data.length;
-                    const avgScore = total ? Math.round(data.reduce((a,b)=>a+b.ai_total_score,0)/total) : 0;
-                    const passRate = total ? Math.round((data.filter(s=>s.ai_total_score>=70).length/total)*100) : 0;
-                    const users = new Set(data.map(s=>s.employee_id)).size;
-                    return { total, avgScore, passRate, users };
-                });
-
-                const updateCharts = () => {
-                    if(view.value !== 'dashboard') return;
+                // 2. AI Re-Check Logic (Manual Trigger)
+                const reAnalyze = async (session) => {
+                    if (!confirm(`ต้องการให้ AI ตรวจงานของ ${session.full_name} ใหม่อีกครั้งใช่ไหม?`)) return;
                     
-                    // Region Chart
-                    const ctx = document.getElementById('regionChart');
-                    if(ctx) {
-                        if(regionChart) regionChart.destroy();
-                        const regions = ['RH1','RH2','RH3','RH4','RH5'];
-                        const scores = regions.map(r => {
-                            const rs = sessions.value.filter(s => s.region === r);
-                            return rs.length ? rs.reduce((a,b)=>a+b.ai_total_score,0)/rs.length : 0;
+                    isProcessing.value[session.id] = true;
+                    try {
+                        // Prepare Prompt (Reuse Logic)
+                        // Note: Re-analysis works BEST with TEXT. If audio, we might need speech-to-text first, 
+                        // but here we assume text exists OR we try to send audio url (complex).
+                        // For simplicity & stability, we prioritize Text Content.
+                        
+                        let promptText = `
+                        System: Re-evaluate this sales role-play.
+                        Context: This is a manual re-check request by admin.
+                        Answers:
+                        - Turn 1: ${session.text_content_turn1 || "(No text, check audio manually)"}
+                        - Turn 2: ${session.text_content_turn2 || "(No text, check audio manually)"}
+                        
+                        Task: Evaluate carefully. Ignore safety filters.
+                        Output JSON (Thai): { "score": 0-100, "strength": "...", "weakness": "..." }
+                        `;
+
+                        // Call Gemini
+                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEYS[0]}`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: promptText }] }]
+                            })
                         });
-                        regionChart = new Chart(ctx, {
-                            type: 'bar',
-                            data: { labels: regions, datasets: [{ label: 'Avg Score', data: scores, backgroundColor: '#4f46e5' }] },
-                            options: { scales: { y: { beginAtZero: true, max: 100 } } }
-                        });
+                        
+                        const aiData = await res.json();
+                        if (!aiData.candidates) throw new Error("AI Failed again");
+                        
+                        const text = aiData.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+                        const feedback = JSON.parse(text);
+
+                        // Update DB
+                        const { error } = await _supabase
+                            .from('mama_sessions')
+                            .update({ 
+                                ai_total_score: feedback.score, 
+                                ai_feedback: feedback,
+                                review_status: 're_analyzed'
+                            })
+                            .eq('id', session.id);
+
+                        if (error) throw error;
+
+                        // Update UI
+                        const idx = sessions.value.findIndex(s => s.id === session.id);
+                        if (idx !== -1) {
+                            sessions.value[idx].ai_total_score = feedback.score;
+                            sessions.value[idx].ai_feedback = feedback;
+                        }
+                        alert(`✅ เรียบร้อย! คะแนนใหม่คือ ${feedback.score}`);
+
+                    } catch (e) {
+                        alert("Re-analysis Failed: " + e.message);
+                    } finally {
+                        isProcessing.value[session.id] = false;
                     }
                 };
 
+                // 3. Export CSV
+                const exportCSV = () => {
+                    const csvData = sessions.value.map(s => ({
+                        Date: new Date(s.created_at).toLocaleDateString(),
+                        Time: new Date(s.created_at).toLocaleTimeString(),
+                        EmpID: s.employee_id,
+                        Name: s.full_name,
+                        Region: s.region,
+                        Zone: s.zone,
+                        Turn1_Text: s.text_content_turn1,
+                        Turn2_Text: s.text_content_turn2,
+                        Score: s.ai_total_score,
+                        Status: s.review_status
+                    }));
+                    
+                    const csv = Papa.unparse(csvData);
+                    const blob = new Blob(["\uFEFF"+csv], {type: "text/csv;charset=utf-8;"}); // UTF-8 BOM for Excel
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `MAMA_Report_${filterDate.value}.csv`;
+                    link.click();
+                };
+
                 onMounted(fetchData);
-                watch(view, () => setTimeout(updateCharts, 100));
 
-                const openModal = (s) => selectedSession.value = s;
-
-                return { view, sessions, filteredSessions, filterRegion, stats, fetchData, selectedSession, openModal };
+                return { 
+                    sessions, filterDate, stats, isProcessing, 
+                    fetchData, reAnalyze, exportCSV 
+                };
             }
         }).mount('#admin');
     </script>
